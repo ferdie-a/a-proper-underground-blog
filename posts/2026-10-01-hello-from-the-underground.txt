@@ -1,0 +1,22 @@
+Hello from the underground
+
+This is the first post on a small blog that lives in a folder of text files. There is no database, no dashboard and no account to sign into, apart from the ones that already hold the code.
+
+Each post is one file. The first line is the title, the rest is the text, and the name of the file carries the date. When I publish, the file lands in a repository, a build turns it into a page, and the page goes online a minute later. That is the whole machine.
+
+I write most of it on the phone, usually in the gaps of a day: on a bus, in a queue, ten minutes before sleep. The editor keeps everything on the device first, so a tunnel or a dead signal does not cost a sentence. When the network comes back, the text goes up.
+
+Nothing here is clever. The pages are plain, there is one font, and the only decoration is the space around the words. If a line is long, it wraps. If a paragraph is short, it stays short.
+
+I wanted a place that asks nothing of me except the writing. Platforms ask for a profile picture, a newsletter, a schedule, a strategy. A folder asks for a file.
+
+So this is the deal I made with myself: a post when there is something to say, nothing when there is not, and no apology for the gap. The archive is a list of dates and titles. You can read it from the bottom up or from the top down; it does not mind.
+
+Welcome, and thanks for reading this far.
+
+--
+started: 2026-09-30T21:40+00:00
+finished: 2026-10-01T08:12+00:00
+written: 34 min
+sessions: 2
+section: post

@@ -1,0 +1,6 @@
+{
+  "name": "a proper underground blog",
+  "shortName": "underground",
+  "lang": "en",
+  "learns": { "title": "Learns", "intro": "Short notes on things I just learned." }
+}

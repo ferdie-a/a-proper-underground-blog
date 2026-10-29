@@ -1,0 +1,24 @@
+Why Git forgot my empty folder
+
+I made a folder for drafts, committed, pushed, and cloned the repository on another computer. The folder was not there. No error, no warning: it had simply never left.
+
+The picture that finally made it click was a removal van. Git is a mover that only carries boxes. It writes down every box, the spot where it stood and what was inside, and in the new house it puts each box back in the same spot. A room is never on the list. If a room ends up existing in the new house, it is only because a box had to be put down in it.
+
+That is close to how Git stores a project. It keeps files, and the path of each file, such as drafts/notes.txt. The folder called drafts is not saved anywhere on its own; it is rebuilt from the paths of the files inside it. An empty folder has no files, so it has no paths, so there is nothing to rebuild. The mover arrives, unloads every box, and the empty room is missing because nobody ever wrote it down.
+
+The fix is a box with nothing important in it. By habit people call it .gitkeep: an empty file whose only job is to sit in the folder so that the folder appears in a path. Git gives the name no special meaning, and any file would do. The name just tells the next person why the file is there.
+
+The same picture explained a second thing that had surprised me. A brand-new branch has to start with at least one commit, and the plainest first commit is one small file. One box, so the van has a reason to drive.
+
+Since then, when a folder vanishes after a clone, I do not look for a bug. I look for the empty room.
+
+pill: Does Git save empty folders? | No. It saves files and their paths, and a folder exists only as part of a path.
+pill: What is a .gitkeep file? | An empty file placed in a folder so the folder has something to carry; the name is a habit, not a Git feature.
+pill: Why does a folder come back after a clone once it holds a file? | Because Git rebuilds every path it stored, and the folder is now part of one.
+
+--
+started: 2026-10-20T19:02+00:00
+finished: 2026-10-20T21:30+00:00
+written: 28 min
+sessions: 2
+section: learn

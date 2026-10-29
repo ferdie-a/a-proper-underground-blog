@@ -1,0 +1,5 @@
+public/
+.dev/
+.vercel/
+.env*
+node_modules/

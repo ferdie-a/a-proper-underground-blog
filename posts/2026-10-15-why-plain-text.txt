@@ -1,0 +1,20 @@
+Why plain text
+
+Every few years the tools I wrote with changed their format, and every few years some of my old notes stopped opening. A word processor file from a decade ago now comes up as a wall of symbols. A note app I liked closed down and left me an export I never managed to read back.
+
+Plain text has not changed. A file written today will open on any machine that exists in twenty years, in an editor that does not exist yet. It needs no plugin, no converter and no subscription. If everything else breaks, it can still be read with the simplest program on the computer.
+
+That is the first reason this blog has no Markdown. The second is that I do not miss it. I tried writing with headings, bold and links in brackets, and I spent more time on the marks than on the sentences. Here a paragraph is a paragraph and a blank line is a pause. An address like https://example.com becomes a link by itself, and that is the only trick the page knows.
+
+The third reason is the diff. Because every post is a text file in a repository, every change is a line that went in or a line that went out. I can see what I wrote on a Tuesday night and what I cut on Wednesday morning. Nothing is hidden inside a binary file.
+
+There are things I give up. No tables, no footnotes, no images in the middle of the text. When a piece needs a picture, it has to carry it in words, and so far that has made the writing better rather than worse.
+
+The constraint is the feature. A blank page with one font and no buttons leaves exactly one thing to do.
+
+--
+started: 2026-10-14T22:05+00:00
+finished: 2026-10-15T07:50+00:00
+written: 41 min
+sessions: 3
+section: post

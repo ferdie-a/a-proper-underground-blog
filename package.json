@@ -1,0 +1,12 @@
+{
+  "name": "a-proper-underground-blog",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "node build.js",
+    "test": "node --test",
+    "dev": "node dev.js"
+  }
+}

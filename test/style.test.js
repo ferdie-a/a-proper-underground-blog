@@ -38,15 +38,26 @@ const rule = (text, selector) => {
   return text.slice(at, text.indexOf('}', at));
 };
 
-test('the body is Palatino at 16px, the pieces are Inconsolata at 16px in a wrapping block moved 20px right', async () => {
+const has = (block, parts) => {
+  for (const part of parts) assert.ok(block.includes(part), part);
+};
+
+test('the root font size is 90%, so every rem is 14.4px', async () => {
+  assert.ok(rule(await css(), 'html').includes('font-size: 90%;'));
+});
+
+test('no font size is set in pixels', async () => {
+  assert.ok(!/font-size:\s*[\d.]+px/.test(await css()));
+});
+
+test('the body is Palatino at 1rem, the pieces are Inconsolata at 1.125rem in a wrapping block', async () => {
   const text = await css();
   const body = rule(text, 'body');
-  assert.ok(body.includes("font-family: Palatino, 'Palatino Linotype', 'Book Antiqua', Georgia, serif;"));
-  assert.ok(body.includes('font-size: 16px;') && body.includes('text-rendering: optimizeLegibility;'));
-  const pre = rule(text, 'pre');
-  assert.ok(pre.includes('font-family: Inconsolata, Courier, monospace;') && pre.includes('font-size: 16px;'));
-  assert.ok(pre.includes('white-space: pre-wrap;') && pre.includes('word-wrap: break-word;'));
-  assert.ok(/margin: \S+ \S+ \S+ 20px;/.test(pre));
+  has(body, ["font-family: Palatino, 'Palatino Linotype', 'Book Antiqua', Georgia, serif;", 'font-size: 1rem;', 'text-rendering: optimizeLegibility;']);
+  has(rule(text, 'pre'), [
+    'margin: 1.25rem 0 0 0.625rem;', 'font-family: Inconsolata, Courier, monospace;', 'font-size: 1.125rem;',
+    'line-height: 1.3;', 'white-space: pre-wrap;', 'overflow-wrap: break-word;',
+  ]);
   assert.ok(rule(text, '.write textarea').includes('font-family: Inconsolata, Courier, monospace;'));
 });
 
@@ -58,45 +69,56 @@ test('the column is 800px wide from 1024px up, 90% below, with 15px of padding',
   assert.ok(rule(text, 'main').includes('padding: 15px;'));
 });
 
-test('the header: a 50px bold h1 inline, the nav inline with grey 14px links 20px apart', async () => {
+test('the header: a fluid bold h1 inline, the nav inline with grey 0.875rem links 20px apart', async () => {
   const text = await css();
-  const h1 = rule(text, 'header h1');
-  assert.ok(h1.includes('display: inline;') && h1.includes('font-size: 50px;') && h1.includes('font-weight: bold;'));
-  const nav = rule(text, 'header nav');
-  assert.ok(nav.includes('display: inline;') && nav.includes('font-size: 14px;'));
+  has(rule(text, 'header h1'), ['display: inline;', 'font-size: clamp(1.875rem, 7.2vw, 3.125rem);', 'font-weight: 700;', 'line-height: 1.15;']);
+  has(rule(text, 'header nav'), ['display: inline;', 'font-size: 0.875rem;']);
   assert.ok(rule(text, 'header nav a, header nav button').includes('margin-left: 20px;'));
 });
 
-test('on phones the h1 drops to 32px', async () => {
-  assert.match(await css(), /@media screen and \(max-width: 600px\) \{\n {2}header h1 \{ font-size: 32px; \}\n\}/);
+test('the h1 scales with the viewport, with no separate phone size', async () => {
+  const text = await css();
+  assert.ok(!text.includes('max-width: 600px'));
+  assert.ok(!/header h1 \{ font-size/.test(text));
 });
 
 test('the editor list and status line are monospace, so the 8-character section column lines up', async () => {
   assert.ok(rule(await css(), '.write #list, .bar #status').includes('font-family: Inconsolata, Courier, monospace;'));
 });
 
-test('articles: inline 30px h2 and an inline grey 14px address', async () => {
+test('the editor: textarea and list at 1.125rem, the list at line-height 1.7, the bar at 0.875rem', async () => {
   const text = await css();
-  const h2 = rule(text, 'article h2');
-  assert.ok(h2.includes('display: inline;') && h2.includes('font-size: 30px;'));
-  const address = rule(text, 'article address');
-  assert.ok(address.includes('display: inline;') && address.includes('font-size: 14px;') && address.includes('color: var(--soft);'));
+  has(rule(text, '.write textarea, .write #list'), ['font-size: 1.125rem;', 'line-height: 1.3;']);
+  assert.ok(rule(text, '.write #list').includes('line-height: 1.7;'));
+  assert.ok(rule(text, '.bar').includes('font-size: 0.875rem;'));
 });
 
-test('the footer is centred, grey, 14px, with a rule on top', async () => {
-  const footer = rule(await css(), 'footer');
-  for (const part of ['text-align: center;', 'font-size: 14px;', 'border-top: 1px solid var(--rule);', 'color: var(--foot);']) {
-    assert.ok(footer.includes(part), part);
-  }
+test('articles: an inline fluid h2 and an inline grey 0.875rem address', async () => {
+  const text = await css();
+  has(rule(text, 'article h2'), ['display: inline;', 'font-size: clamp(1.5rem, 5.4vw, 1.875rem);', 'font-weight: 400;', 'line-height: 1.2;']);
+  has(rule(text, 'article address'), ['display: inline;', 'font-size: 0.875rem;', 'color: var(--soft);']);
 });
 
-test('the colours: white, black, #666 links, #999, #ccc; dark #111, #e6e6e6, #9a9a9a, #8a8a8a, #333; no accent', async () => {
+test('the list rows are 1.25rem at line-height 1.7, the date 0.875rem from the title', async () => {
+  const text = await css();
+  has(rule(text, '.list article h2'), ['font-size: 1.25rem;', 'line-height: 1.7;']);
+  assert.ok(rule(text, '.list article address').includes('0.875rem'));
+});
+
+test('the footer is centred, grey, 0.875rem, with a rule on top', async () => {
+  has(rule(await css(), 'footer'), ['text-align: center;', 'font-size: 0.875rem;', 'border-top: 1px solid var(--rule);', 'color: var(--foot);']);
+});
+
+test('the colours: white, black, #666 links, #999, #ccc, a #f4f3f1 panel; dark #111, #e6e6e6, #9a9a9a, #8a8a8a, #333, a #1c1c1c panel; no accent', async () => {
   const text = await css();
   assert.ok(text.includes(':root { --paper: #ffffff; --ink: #000000; --link: #666666; --soft: #999999; --rule: #cccccc; --foot: #cccccc;'));
+  assert.ok(text.startsWith(':root {') && /^:root \{[^}]*--panel: #f4f3f1;/.test(text));
   const dark = '--paper: #111111; --ink: #e6e6e6; --link: #9a9a9a; --soft: #8a8a8a; --rule: #333333; --foot: #8a8a8a;';
   assert.ok(text.includes(`:root:not([data-theme="light"]) { ${dark}`));
   assert.ok(text.includes(`:root[data-theme="dark"] { ${dark}`));
-  assert.ok(!text.includes('--accent') && !text.includes('--panel'));
+  assert.match(text, /:root:not\(\[data-theme="light"\]\) \{[^}]*--panel: #1c1c1c;/);
+  assert.match(text, /:root\[data-theme="dark"\] \{[^}]*--panel: #1c1c1c;/);
+  assert.ok(!text.includes('--accent'));
   assert.ok(!/#[0-9a-f]{3,6}\b/i.test(text.slice(text.indexOf('@font-face'))), 'colours only through the tokens');
 });
 
@@ -107,25 +129,95 @@ const luminance = (hex) => {
 };
 const contrast = (a, b) => (Math.max(luminance(a), luminance(b)) + 0.05) / (Math.min(luminance(a), luminance(b)) + 0.05);
 
-test('in the dark theme dates, footer and links reach 4.5:1 on the paper', async () => {
+test('in the dark theme dates, footer and links reach 4.5:1 on the paper and on the panel', async () => {
   const text = await css();
   const dark = text.slice(text.indexOf(':root[data-theme="dark"] {'));
   const token = (name) => new RegExp(`--${name}: (#[0-9a-f]{6});`).exec(dark)[1];
   for (const name of ['soft', 'foot', 'link', 'note']) {
     assert.ok(contrast(token(name), token('paper')) >= 4.5, `${name} ${contrast(token(name), token('paper')).toFixed(2)}`);
   }
+  for (const name of ['soft', 'link', 'ink']) {
+    assert.ok(contrast(token(name), token('panel')) >= 4.5, `${name} on panel ${contrast(token(name), token('panel')).toFixed(2)}`);
+  }
 });
 
-test('the demo note: a box with a 1px rule, 14px text, the close button on the right', async () => {
+test('secondary text on the panels uses --soft-on-panel, which reaches 4.5:1 on the panel in both themes', async () => {
   const text = await css();
-  const note = rule(text, '#demo-note');
-  assert.ok(note.includes('border: 1px solid var(--rule);') && note.includes('font-size: 14px;'));
+  const light = text.slice(0, text.indexOf('}'));
+  const dark = text.slice(text.indexOf(':root[data-theme="dark"] {'));
+  for (const block of [light, dark]) {
+    const token = (name) => new RegExp(`--${name}: (#[0-9a-f]{6});`).exec(block)[1];
+    for (const name of ['soft-on-panel', 'link', 'ink']) {
+      assert.ok(contrast(token(name), token('panel')) >= 4.5, `${name} on panel ${contrast(token(name), token('panel')).toFixed(2)}`);
+    }
+  }
+  assert.match(text, /:root:not\(\[data-theme="light"\]\) \{[^}]*--soft-on-panel: #[0-9a-f]{6};/);
+  assert.ok(rule(text, '.pill-title').includes('color: var(--soft-on-panel);'));
+  for (const selector of ['.blog-box', '.blog-title', '.blog-icon', '.blog-rotation', '.blog-toggle', '.pill', '.pill-title', '.pill-q', '.pill-a', '.pill-from', '.pill-skip']) {
+    assert.ok(!rule(text, selector).includes('var(--soft)'), selector);
+  }
+  assert.ok(rule(text, 'article address').includes('color: var(--soft);'));
+  assert.ok(rule(text, '.blog-intro').includes('color: var(--soft);'));
+});
+
+test('the demo note: a box with a 1px rule, 0.875rem text, 1rem code, the close button on the right', async () => {
+  const text = await css();
+  has(rule(text, '#demo-note'), ['border: 1px solid var(--rule);', 'font-size: 0.875rem;']);
+  assert.ok(rule(text, '#demo-note code').includes('font-size: 1rem;'));
   assert.ok(rule(text, '#demo-close').includes('margin-left: auto;'));
 });
 
-test('the stylesheet keeps the learns box and the Learning Pill rules', async () => {
+test('the learns box is a clickable panel, with the list 1.75rem below it', async () => {
   const text = await css();
-  for (const kept of ['.blog-box {', '.blog-title {', '.blog-icon {', '.blog-rotation {', '.blog-toggle {', '.blog-page-title {', '.blog-intro {', '.pill {', '.pill-open {', '.pill-skip {']) {
-    assert.ok(text.includes(kept), kept);
-  }
+  has(rule(text, '.blog-box'), ['position: relative;', 'margin: 0 0 0.75rem;', 'padding: 0.9rem 1.1rem;', 'background: var(--panel);', 'cursor: pointer;']);
+  assert.ok(rule(text, '.blog-box + .list').includes('margin-top: 1.75rem;'));
+});
+
+test('the learns box title: a fluid bold block with room for the toggle, in ink, with a soft pencil', async () => {
+  const text = await css();
+  const title = rule(text, '.blog-title');
+  has(title, ['margin: 0 2.5rem 0.5rem 0;', 'font-size: clamp(1.5rem, 4.5vw, 2.25rem);', 'font-weight: 700;', 'line-height: 1.15;']);
+  assert.ok(!title.includes('display: inline;'));
+  assert.ok(rule(text, '.blog-title a').includes('color: var(--ink);'));
+  has(rule(text, '.blog-icon'), ['display: inline-block;', 'width: 0.6em;', 'height: 0.6em;', 'margin-left: 0.35em;', 'vertical-align: 0.05em;', 'fill: none;', 'stroke: var(--soft-on-panel);', 'stroke-width: 1.75;']);
+});
+
+test('the learns box rotation: one 1.125rem line with an ellipsis, two fixed lines on phones, links in ink', async () => {
+  const text = await css();
+  has(rule(text, '.blog-rotation'), ['list-style: none;', 'margin: 0;', 'padding: 0;', 'font-size: 1.125rem;', 'line-height: 1.4;']);
+  has(rule(text, '.blog-rotation li'), ['white-space: nowrap;', 'overflow: hidden;', 'text-overflow: ellipsis;']);
+  const phone = text.slice(text.indexOf('@media (max-width: 40rem) {'));
+  assert.ok(text.includes('@media (max-width: 40rem) {'));
+  has(phone.slice(0, phone.indexOf('}')), ['.blog-rotation li', 'white-space: normal;', 'display: -webkit-box;', '-webkit-box-orient: vertical;', '-webkit-line-clamp: 2;', 'overflow: hidden;', 'min-height: 2.8em;']);
+  assert.ok(rule(text, '.blog-rotation a').includes('color: var(--ink);'));
+});
+
+test('the learns box toggle sits in the top right corner with a 2.5rem target', async () => {
+  has(rule(await css(), '.blog-toggle'), [
+    'position: absolute;', 'top: calc(0.9rem + 0.5625rem - 1.25rem);', 'right: calc(1.1rem + 0.28125rem - 1.25rem);',
+    'display: inline-flex;', 'align-items: center;', 'justify-content: center;',
+    'min-width: 2.5rem;', 'min-height: 2.5rem;', 'padding: 0;', 'font-size: 1.125rem;', 'line-height: 1;',
+  ]);
+});
+
+test('the learns page: a fluid bold title and a soft 0.875rem intro', async () => {
+  const text = await css();
+  has(rule(text, '.blog-page-title'), ['margin: 0 0 0.75rem;', 'font-size: clamp(1.5rem, 4.5vw, 2.25rem);', 'font-weight: 700;', 'line-height: 1.15;']);
+  has(rule(text, '.blog-intro'), ['margin: 0 0 0.75rem;', 'font-size: 0.875rem;', 'color: var(--soft);']);
+});
+
+test('the Learning Pill is a panel without a border, the question and answer at 1.125rem', async () => {
+  const text = await css();
+  const pill = rule(text, '.pill');
+  has(pill, ['margin: 0 0 1.75rem;', 'padding: 0.9rem 1.1rem;', 'background: var(--panel);']);
+  assert.ok(!pill.includes('border'));
+  has(rule(text, '.pill-title'), ['margin: 0 0 0.5rem;', 'font-size: 0.875rem;', 'font-weight: 400;', 'color: var(--soft-on-panel);']);
+  has(rule(text, '.pill-q'), ['margin: 0;', 'font-size: 1.125rem;', 'line-height: 1.4;']);
+  has(rule(text, '.pill-a'), ['margin-top: 0.5rem;', 'font-size: 1.125rem;', 'line-height: 1.4;']);
+  assert.ok(rule(text, '.pill-a p').includes('margin: 0 0 0.4rem;'));
+  has(rule(text, '.pill-from'), ['font-size: 0.875rem;', 'color: var(--soft-on-panel);']);
+  has(rule(text, '.pill-open'), ['display: inline-flex;', 'min-width: 2.5rem;', 'min-height: 2.5rem;', 'vertical-align: middle;']);
+  has(rule(text, '.pill-arrow'), ['width: 0.9em;', 'height: 0.9em;', 'stroke: currentColor;', 'stroke-width: 2;']);
+  assert.ok(rule(text, '.pill-open[aria-expanded="true"] .pill-arrow').includes('transform: rotate(90deg);'));
+  has(rule(text, '.pill-skip'), ['margin: 0.5rem 0 0;', 'font-size: 0.875rem;']);
 });

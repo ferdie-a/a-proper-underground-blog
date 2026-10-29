@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createDesk } from '../site/desk.js';
-import { createSync, doorClient } from '../site/sync.js';
+import { createSync, doorClient, demoDoor } from '../site/sync.js';
 import { handle } from '../server/door.js';
 import { build } from '../build.js';
 import { createFakeGithub } from '../fakes/github.js';
@@ -1029,4 +1029,71 @@ test('the draft of a learn with pill: lines at the end is not published as post 
   assert.equal(github.branches.main.size, 0);
   assert.ok(laptop.desk.get(A));
   assert.deepEqual(await laptop.sync.publish(A, NOW, 'learn'), { slug: 'how-caching-lied-to-me', path: 'learns/2026-10-05-how-caching-lied-to-me.txt' });
+});
+
+function demoDevice(password = 'prova') {
+  const desk = createDesk(createFakeStorage());
+  desk.setPassword(password);
+  const door = demoDoor(desk, 'prova');
+  const sync = createSync({ desk, door });
+  function write(path, text) {
+    const old = desk.get(path);
+    const times = tick(old?.times || newTimes(), Date.UTC(2026, 9, 3, 19, 14));
+    desk.save(path, text, times, fileFromRecord({ text, times, meta: old?.meta || {} }));
+  }
+  return { desk, door, sync, write };
+}
+
+test('demo door: a wrong password is refused with 401 and the desk is left as it was', async () => {
+  const dev = demoDevice('nope');
+  dev.write(A, 'Title\n\nBody.');
+  assert.deepEqual(await dev.sync.run(), { ok: false, status: 401, error: 'wrong password' });
+  assert.notEqual(dev.desk.get(A).pending, null);
+});
+
+test('demo door: "save" settles on the desk alone, with no conflict', async () => {
+  const dev = demoDevice();
+  dev.write(A, 'Title\n\nBody.');
+  dev.write(B, 'Other\n\nText.');
+  assert.deepEqual(await dev.sync.run(), { ok: true });
+  for (const path of [A, B]) {
+    const r = dev.desk.get(path);
+    assert.equal(r.pending, null);
+    assert.ok(r.sha);
+    assert.equal(r.conflict, null);
+  }
+  dev.write(A, 'Title\n\nBody, again.');
+  assert.deepEqual(await dev.sync.run(), { ok: true });
+  assert.equal(dev.desk.get(A).text, 'Title\n\nBody, again.');
+  assert.equal(dev.desk.list().filter((r) => r.conflict).length, 0);
+});
+
+test('demo door: publish, move and delete work on the desk; history says there is none', async () => {
+  const dev = demoDevice();
+  dev.write(A, 'A title\n\nBody.');
+  await dev.sync.run();
+  const out = await dev.sync.publish(A, NOW, 'post');
+  assert.deepEqual(out, { slug: 'a-title', path: 'posts/2026-10-05-a-title.txt' });
+  assert.equal(dev.desk.get(A), null);
+  assert.equal(dev.desk.get(out.path).text, 'A title\n\nBody.');
+  assert.deepEqual(dev.desk.getPosts(), [out.path]);
+  const back = await dev.sync.move(out.path, 'private');
+  assert.equal(back.path, 'private/a-title.txt');
+  assert.equal(dev.desk.get(out.path), null);
+  assert.deepEqual(dev.desk.getPosts(), []);
+  await dev.sync.run();
+  await dev.sync.remove(back.path);
+  assert.equal(dev.desk.get(back.path), null);
+  assert.deepEqual(await dev.sync.run(), { ok: true });
+  await assert.rejects(dev.door('history', { path: A }), (e) => e.error === 'demo: no history');
+});
+
+test('demo door: a read gives back the copy last written, not the unsaved edits of the desk', async () => {
+  const dev = demoDevice();
+  dev.write(A, 'Title\n\nSaved.');
+  await dev.sync.run();
+  dev.desk.type(A, 'Title\n\nNot saved.', dev.desk.get(A).times);
+  const found = await dev.door('read', { path: A });
+  assert.equal(parsePost(found.content).body, 'Saved.');
+  assert.equal(found.sha, dev.desk.get(A).sha);
 });

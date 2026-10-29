@@ -19,11 +19,11 @@ test('the desk keeps every file, the list, the password and the open file under 
   assert.deepEqual(keysOf(storage), ['blog:file:drafts/a.txt', 'blog:open', 'blog:password', 'blog:posts']);
 });
 
-const quotedKeys = (source) => [...source.matchAll(/'([a-z]+:[a-z:]*)'/g)].map((m) => m[1]);
+const quotedKeys = (source) => [...source.matchAll(/'([a-z]+:[a-z:-]*)'/g)].map((m) => m[1]);
 
-test('theme.js keeps the theme under blog:theme and reads the password from the desk key', async () => {
+test('theme.js keeps the theme under blog:theme, the closed demo note under blog:demo-note and reads the password from the desk key', async () => {
   const source = await readFile('site/theme.js', 'utf8');
-  assert.deepEqual(quotedKeys(source).sort(), ['blog:password', 'blog:theme']);
+  assert.deepEqual(quotedKeys(source).sort(), ['blog:demo-note', 'blog:password', 'blog:theme']);
   const storage = createFakeStorage();
   createDesk(storage).setPassword('secret');
   assert.equal(storage.getItem('blog:password'), 'secret');

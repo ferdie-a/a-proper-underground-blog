@@ -1,5 +1,5 @@
 import { createDesk, NEW } from './desk.js';
-import { createSync, doorClient } from './sync.js';
+import { createSync, doorClient, demoDoor } from './sync.js';
 import {
   newTimes, tick, fileFromRecord, parsePost, splitTitleBody, joinTitleBody,
   slugify, uniqueSlug, draftPath, parseDraftPath, formatDuration, localDate,
@@ -13,12 +13,10 @@ const cmds = $('cmds');
 const statusBox = $('status');
 
 const DEMO = document.querySelector('meta[name="demo"]')?.getAttribute('content') === '1';
-const DEMO_NOTE = 'demo: saving is off';
+const DEMO_NOTE = 'demo: saved in this browser only';
 
 const desk = createDesk(localStorage);
-const door = DEMO
-  ? async () => { throw { status: 403, error: DEMO_NOTE }; }
-  : doorClient(() => desk.getPassword());
+const door = DEMO ? demoDoor(desk, 'prova') : doorClient(() => desk.getPassword());
 const sync = createSync({ desk, door });
 
 let path = NEW;
@@ -34,6 +32,7 @@ let holds = 0;
 const isDraft = () => path.startsWith('drafts/');
 const onMain = () => isPublic(sectionOf(path));
 const offline = (e) => e.status === 0;
+const online = () => DEMO || navigator.onLine;
 const reason = (e) => e.error || e.message || String(e);
 const when = (stamp) => new Date(stamp).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
@@ -67,8 +66,8 @@ function render() {
     DEMO ? DEMO_NOTE : '',
     unsafe ? 'unsaved' : !r ? '' : r.dirty ? 'unsaved' : r.pending !== null ? 'saved on this device' : r.sha ? 'saved' : '',
     times.started ? `started ${when(times.started)} · written ${formatDuration(times.writtenMs)} · ${times.sessions} ${times.sessions === 1 ? 'session' : 'sessions'}` : '',
-    navigator.onLine ? '' : 'offline',
-    waiting ? `to upload: ${waiting}` : 'all uploaded',
+    online() ? '' : 'offline',
+    DEMO ? '' : waiting ? `to upload: ${waiting}` : 'all uploaded',
     unsafe ? 'browser storage full: the text is only here on screen' : '',
     shared === path ? 'this file is also open in another tab: use only one' : '',
     note,
@@ -165,7 +164,6 @@ function refresh() {
 }
 
 async function align() {
-  if (DEMO) return render();
   if (!desk.getPassword()) {
     if (!asking) askPassword();
     return;
@@ -187,7 +185,7 @@ async function align() {
 
 function cannotSave() {
   if (!textarea.value.trim()) return 'nothing to save';
-  if (onMain() && !navigator.onLine) return 'published pieces can only be edited online';
+  if (onMain() && !online()) return 'published pieces can only be edited online';
   return '';
 }
 
@@ -266,6 +264,7 @@ async function fork() {
 
 async function versions() {
   flush();
+  if (DEMO) { note = 'demo: no history'; return render(); }
   if (!desk.get(path)?.sha) { note = 'no uploaded save yet'; return render(); }
   try {
     const { versions: found } = await door('history', { path });
@@ -344,7 +343,7 @@ async function publish(section) {
   const from = sectionOf(target);
   if (from === null || from === section || (!section && isPublic(from))) return;
   if (timer !== null || desk.get(target)?.dirty) await save();
-  if (!navigator.onLine) { note = 'publishing needs the network'; return render(); }
+  if (!online()) { note = 'publishing needs the network'; return render(); }
   await align();
   if (asking || path !== target) return;
   const title = splitTitleBody(textarea.value).title || 'untitled';
@@ -360,7 +359,6 @@ async function publish(section) {
     if ((await ask(question, ['yes', 'no'], { cancel: 'no' })) !== 'yes') return;
   }
   if (path !== target) return;
-  if (DEMO) { note = DEMO_NOTE; return render(); }
   const now = new Date();
   textarea.readOnly = true;
   let out;
@@ -375,7 +373,7 @@ async function publish(section) {
   if (path === target && !desk.get(target)) open(NEW);
   const date = parsePublishedPath(out.path)?.date;
   const kept = date && date !== localDate(now) ? ` (keeps its date: ${date})` : '';
-  note = `published: /${to === 'learn' ? 'learns/' : ''}${out.slug}${kept}`;
+  note = DEMO ? `published in this browser only: ${out.slug}` : `published: /${to === 'learn' ? 'learns/' : ''}${out.slug}${kept}`;
   render();
 }
 
@@ -394,7 +392,7 @@ async function moveAway(target, section, question) {
   if (unsafe) return render();
   const label = SECTION_LABEL[section];
   const down = isPublic(sectionOf(target));
-  if (down && !navigator.onLine) { note = 'taking a piece off the site needs the network'; return render(); }
+  if (down && !online()) { note = 'taking a piece off the site needs the network'; return render(); }
   if (question && (await ask(question, ['yes', 'no'], { cancel: 'no' })) !== 'yes') return;
   if (path !== target) return;
   flush();
@@ -497,7 +495,7 @@ function files() {
 
 async function openPublished(p) {
   const local = desk.get(p);
-  if (!local || (!local.dirty && local.pending === null)) {
+  if (!local || (!DEMO && !local.dirty && local.pending === null)) {
     try {
       const found = await door('read', { path: p });
       desk.fromRepo(p, found.content, found.sha);
@@ -543,7 +541,7 @@ function site() {
   flush();
   if (unsafe) copy();
   if (unsafe) return render();
-  const found = onMain() ? parsePublishedPath(path) : null;
+  const found = onMain() && !DEMO ? parsePublishedPath(path) : null;
   const target = !found ? '/' : found.section === 'learn' ? `/learns/${found.slug}` : `/${found.slug}`;
   location.assign(target);
 }
@@ -713,6 +711,5 @@ setInterval(() => {
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 
-if (DEMO) start();
-else if (desk.getPassword()) { start(); align(); }
+if (desk.getPassword()) { start(); align(); }
 else askPassword();

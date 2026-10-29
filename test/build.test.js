@@ -5,6 +5,7 @@ import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, parse, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import vm from 'node:vm';
 import { build, readSiteConfig } from '../build.js';
 import { RESERVED_SLUGS } from '../site/lib/post.js';
 import * as icons from '../lib/icons.js';
@@ -54,16 +55,17 @@ test('the home page lists the posts from the most recent', async () => {
   const dirs = await site(TWO);
   await build(dirs);
   const index = await readFile(join(dirs.outDir, 'index.html'), 'utf8');
-  assert.ok(index.includes('<span class="date">2026-10-05</span> <a href="/first-post">First post</a>'));
+  assert.ok(index.includes('<section class="list">\n<article><h2><a href="/first-post">First post</a></h2> <address>2026-10-05</address></article>\n<article><h2><a href="/second-post">Second post</a></h2> <address>2026-10-01</address></article>\n</section>'));
   assert.ok(index.indexOf('First post') < index.indexOf('Second post'));
+  assert.ok(!index.includes('Hello'), 'no preview under the title');
 });
 
 test('the post page has title, date and theme switch', async () => {
   const dirs = await site(TWO);
   await build(dirs);
   const page = await readFile(join(dirs.outDir, 'first-post.html'), 'utf8');
-  assert.ok(page.includes('<h2>First post</h2>'));
-  assert.ok(page.includes('<p class="date">2026-10-05</p>'));
+  assert.ok(page.includes('<main>\n<article>\n<h2>First post</h2> <address>2026-10-05</address>\n<pre>Hello '));
+  assert.ok(page.includes('</pre>\n</article>\n</main>'));
   assert.ok(page.includes('<script src="/theme.js"></script>'));
   assert.ok(page.includes('<button id="theme" type="button" hidden></button>'));
 });
@@ -160,7 +162,7 @@ test('code written in a post stays text, addresses become links', async () => {
 
 test('pages load nothing from other sites and link nowhere outside, apart from the text of a piece', async () => {
   const dirs = await site(TWO, LEARNS);
-  await build(dirs);
+  await withDemo(undefined, () => build(dirs));
   for (const page of await htmlPages(dirs.outDir)) {
     const frame = page.replace(/<pre>[\s\S]*?<\/pre>/g, '');
     for (const [, target] of frame.matchAll(/\ssrc="([^"]+)"/g)) assert.ok(target.startsWith('/'), target);
@@ -186,12 +188,35 @@ test('every public page has the hidden "write" link in its header, after the the
   const dirs = await site(TWO, LEARNS);
   await build(dirs);
   const link = '<a id="write" href="/write" hidden>write</a>';
-  const header = `<button id="theme" type="button" hidden></button>${link}</header>`;
+  const header = `<button id="theme" type="button" hidden></button>${link}</nav></header>`;
   for (const name of PUBLIC_PAGES) {
     const html = await readFile(join(dirs.outDir, name), 'utf8');
     const top = html.slice(html.indexOf('<header>'), html.indexOf('</header>') + '</header>'.length);
     assert.ok(top.endsWith(header), name);
     assert.equal(html.split('id="write"').length, 2, name);
+  }
+});
+
+test('the header holds the name as h1 and, on the same line, the nav: the learns title in lower case, only when there are learns', async () => {
+  const tail = '<button id="theme" type="button" hidden></button><a id="write" href="/write" hidden>write</a></nav></header>';
+  const withLearns = await site(TWO, LEARNS);
+  await build(withLearns);
+  for (const name of PUBLIC_PAGES) {
+    const html = await readFile(join(withLearns.outDir, name), 'utf8');
+    assert.ok(html.includes(`<header><h1><a href="/">A test blog</a></h1> <nav><a href="/learns">notes</a>${tail}`), name);
+  }
+  const escaped = await site(TWO, LEARNS, { ...CONFIG, learns: { title: 'Q & A <Notes>', intro: 'x' } });
+  await build(escaped);
+  for (const name of PUBLIC_PAGES) {
+    const html = await readFile(join(escaped.outDir, name), 'utf8');
+    assert.ok(html.includes(`<nav><a href="/learns">q &amp; a &lt;notes&gt;</a>${tail}`), name);
+  }
+  const without = await site(TWO);
+  await build(without);
+  for (const name of ['index.html', 'first-post.html', '404.html']) {
+    const html = await readFile(join(without.outDir, name), 'utf8');
+    assert.ok(html.includes(`<header><h1><a href="/">A test blog</a></h1> <nav>${tail}`), name);
+    assert.ok(!html.includes('href="/learns"'), name);
   }
 });
 
@@ -235,7 +260,9 @@ test('same files, same result', async () => {
 test('without posts the home page is empty but valid', async () => {
   const dirs = await site({});
   assert.equal(await build(dirs), 0);
-  assert.ok((await readFile(join(dirs.outDir, 'index.html'), 'utf8')).includes('<ul class="list">'));
+  const index = await readFile(join(dirs.outDir, 'index.html'), 'utf8');
+  assert.ok(index.includes('<main>\n<section class="list">\n\n</section>\n</main>'));
+  assert.ok(!index.includes('<article'));
 });
 
 test('without the posts folder the build does not break', async () => {
@@ -393,6 +420,101 @@ test('with BLOG_DEMO=1 write.html carries the demo meta; with any other value it
   }
 });
 
+const REPO = 'https://github.com/ferdie-a/a-proper-underground-blog';
+const DEMO_NOTE = '<div id="demo-note" hidden><p>This is a mock blog. Clone the repo and make it yours: '
+  + `<a href="${REPO}" rel="noopener">github.com/ferdie-a/a-proper-underground-blog</a>. `
+  + 'Open <a href="/write">/write</a> and type <code>prova</code> as the password to try the editor.</p>'
+  + '<button id="demo-close" type="button">close</button></div>';
+
+test('with BLOG_DEMO=1 every public page and the editor open with the hidden demo note: repo link, /write, prova, close', async () => {
+  const dirs = await site(TWO, LEARNS);
+  await withDemo('1', () => build(dirs));
+  for (const name of PUBLIC_PAGES) {
+    const html = await readFile(join(dirs.outDir, name), 'utf8');
+    assert.ok(html.includes(`<body>\n${DEMO_NOTE}\n<header>`), name);
+    assert.equal(html.split('id="demo-note"').length, 2, name);
+  }
+  const editor = await readFile(join(dirs.outDir, 'write.html'), 'utf8');
+  assert.ok(editor.includes(`<body class="write">\n${DEMO_NOTE}\n<textarea id="text" hidden></textarea>`));
+});
+
+test('without BLOG_DEMO=1 the demo note is not in the markup at all', async () => {
+  for (const value of [undefined, '', '0', 'true']) {
+    const dirs = await site(TWO, LEARNS);
+    await withDemo(value, () => build(dirs));
+    for (const page of await htmlPages(dirs.outDir)) {
+      assert.ok(!page.includes('demo-note') && !page.includes('demo-close') && !page.includes(REPO), String(value));
+    }
+  }
+});
+
+test('with BLOG_DEMO=1 the only link outside, apart from the text of a piece, is the repo in the demo note', async () => {
+  const dirs = await site(TWO, LEARNS);
+  await withDemo('1', () => build(dirs));
+  for (const page of await htmlPages(dirs.outDir)) {
+    const frame = page.replace(/<pre>[\s\S]*?<\/pre>/g, '');
+    const outside = [...frame.matchAll(/<a [^>]*href="([^"]+)"/g)].map((m) => m[1]).filter((t) => !t.startsWith('/'));
+    assert.deepEqual(outside, [REPO]);
+  }
+});
+
+async function runTheme(saved, { broken = false, withNote = true } = {}) {
+  const source = await readFile('site/theme.js', 'utf8');
+  const store = new Map(Object.entries(saved));
+  const on = {};
+  const element = (hidden) => ({
+    hidden, textContent: '', handlers: {},
+    addEventListener(type, fn) { this.handlers[type] = fn; },
+    setAttribute() {}, getAttribute() { return null; },
+  });
+  const note = element(true);
+  const close = element(false);
+  const ids = withNote ? { 'demo-note': note, 'demo-close': close } : {};
+  const storage = broken
+    ? { getItem() { throw new Error('denied'); }, setItem() { throw new Error('denied'); } }
+    : { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)) };
+  vm.runInNewContext(source, {
+    localStorage: storage,
+    document: { documentElement: element(false), getElementById: (id) => ids[id] || null, addEventListener: (type, fn) => { (on[type] ||= []).push(fn); } },
+    window: { addEventListener() {}, matchMedia: () => ({ matches: false }) },
+  });
+  for (const fn of on.DOMContentLoaded || []) fn();
+  return { note, close, store };
+}
+
+test('theme.js shows the demo note unless it was closed; close hides it and remembers it', async () => {
+  const fresh = await runTheme({});
+  assert.equal(fresh.note.hidden, false);
+  fresh.close.handlers.click();
+  assert.equal(fresh.note.hidden, true);
+  assert.equal(fresh.store.get('blog:demo-note'), 'closed');
+  assert.equal((await runTheme({ 'blog:demo-note': 'closed' })).note.hidden, true);
+  assert.equal((await runTheme({ 'blog:demo-note': 'open' })).note.hidden, false);
+});
+
+test('theme.js: with storage refused the note still shows and closes; pages without the note are left alone', async () => {
+  const broken = await runTheme({}, { broken: true });
+  assert.equal(broken.note.hidden, false);
+  broken.close.handlers.click();
+  assert.equal(broken.note.hidden, true);
+  await runTheme({}, { withNote: false });
+});
+
+test('theme.js stays a classic script', async () => {
+  const source = await readFile('site/theme.js', 'utf8');
+  assert.ok(!/\bimport\b|\bexport\b|=>|\?\.|\blet\b|\bconst\b/.test(source));
+});
+
+test('no page carries inline styles, with or without the demo', async () => {
+  for (const value of [undefined, '1']) {
+    const dirs = await site(TWO, LEARNS);
+    await withDemo(value, () => build(dirs));
+    for (const page of await htmlPages(dirs.outDir)) {
+      assert.ok(!/\sstyle=/i.test(page) && !/<style/i.test(page), String(value));
+    }
+  }
+});
+
 test('the editor copy gets a new fingerprint when the name or the demo mode changes', async () => {
   const plain = await site({});
   const renamed = await site({}, {}, { ...CONFIG, name: 'Another blog' });
@@ -428,7 +550,7 @@ test('a learn has its page at /learns/<address>, shaped like a post, without pil
   const dirs = await site(TWO, LEARNS);
   await build(dirs);
   const page = await readFile(join(dirs.outDir, 'learns', 'why-my-phone-showed-the-old-page.html'), 'utf8');
-  assert.ok(page.includes('<h2>Why my phone showed the old page</h2>\n<p class="date">2026-10-19</p>\n<pre>I changed one line and nothing moved.\n\nThe copy was old.</pre>'));
+  assert.ok(page.includes('<article>\n<h2>Why my phone showed the old page</h2> <address>2026-10-19</address>\n<pre>I changed one line and nothing moved.\n\nThe copy was old.</pre>\n</article>'));
   assert.ok(!page.includes('pill:') && !page.includes('Its saved copy'));
   assert.ok(existsSync(join(dirs.outDir, 'learns', 'a-test-that-lied.html')));
 });
@@ -437,7 +559,7 @@ test('the home has the learns box before the posts, titled from site.json: newes
   const dirs = await site(TWO, LEARNS);
   await build(dirs);
   const index = await readFile(join(dirs.outDir, 'index.html'), 'utf8');
-  assert.ok(index.includes(`<main>\n<section class="blog-box blog-learns" id="blog-learns">\n<h2 class="blog-title"><a href="/learns">Notes</a> ${PENCIL}</h2>\n<button class="blog-toggle" id="blog-learns-toggle" type="button" hidden></button>\n<ul class="blog-rotation">\n<li><a href="/learns/why-my-phone-showed-the-old-page">Why my phone showed the old page</a></li>\n<li hidden><a href="/learns/a-test-that-lied">A test that lied</a></li>\n</ul>\n</section>\n<ul class="list">`));
+  assert.ok(index.includes(`<main>\n<section class="blog-box blog-learns" id="blog-learns">\n<h2 class="blog-title"><a href="/learns">Notes</a> ${PENCIL}</h2>\n<button class="blog-toggle" id="blog-learns-toggle" type="button" hidden></button>\n<ul class="blog-rotation">\n<li><a href="/learns/why-my-phone-showed-the-old-page">Why my phone showed the old page</a></li>\n<li hidden><a href="/learns/a-test-that-lied">A test that lied</a></li>\n</ul>\n</section>\n<section class="list">\n<article>`));
   assert.ok(index.includes('<script src="/learns.js" defer></script>'), 'the script rotates the box');
 });
 
@@ -452,7 +574,7 @@ test('the learns box is there with a single learn; without learns, no box, no /l
   const bare = await readFile(join(none.outDir, 'index.html'), 'utf8');
   assert.ok(!bare.includes('blog-learns'));
   assert.ok(!bare.includes('/learns.js'));
-  assert.ok(bare.includes('<main>\n<ul class="list">'));
+  assert.ok(bare.includes('<main>\n<section class="list">\n<article>'));
   assert.ok(!existsSync(join(none.outDir, 'learns.html')));
 });
 
@@ -461,8 +583,8 @@ test('the /learns page: title and intro from site.json, pill, then the learns ne
   await build(dirs);
   const page = await readFile(join(dirs.outDir, 'learns.html'), 'utf8');
   assert.ok(page.includes('<h2 class="blog-page-title">Notes</h2>\n<p class="blog-intro">Things I found out.</p>\n<section class="pill" id="pill">'));
-  assert.ok(page.includes('<ul class="list">\n<li><span class="date">2026-10-19</span> <a href="/learns/why-my-phone-showed-the-old-page">Why my phone showed the old page</a></li>\n<li><span class="date">2026-10-12</span> <a href="/learns/a-test-that-lied">A test that lied</a></li>\n</ul>'));
-  assert.ok(page.indexOf('id="pill"') < page.indexOf('<ul class="list">'));
+  assert.ok(page.includes('<section class="list">\n<article><h2><a href="/learns/why-my-phone-showed-the-old-page">Why my phone showed the old page</a></h2> <address>2026-10-19</address></article>\n<article><h2><a href="/learns/a-test-that-lied">A test that lied</a></h2> <address>2026-10-12</address></article>\n</section>'));
+  assert.ok(page.indexOf('id="pill"') < page.indexOf('<section class="list">'));
   assert.ok(page.includes('<script src="/learns.js" defer></script>'));
   assert.ok(page.includes('<title>Notes - A test blog</title>'));
 });
@@ -485,18 +607,24 @@ test('piece pages and the 404 load no script beyond the theme', async () => {
   }
 });
 
-test('the build writes only the scripts of site/ and no page has a footer', async () => {
+test('the build writes only the scripts of site/', async () => {
   const dirs = await site(TWO, LEARNS);
   await build(dirs);
   const scripts = (await readdir(dirs.outDir)).filter((n) => n.endsWith('.js')).sort();
   const sources = (await readdir('site')).filter((n) => n.endsWith('.js')).sort();
   assert.deepEqual(scripts, sources);
   assert.ok(existsSync(join(dirs.outDir, 'learns.js')));
-  for (const page of await htmlPages(dirs.outDir)) {
-    for (const leak of ['<footer', '-foot']) {
-      assert.ok(!page.toLowerCase().includes(leak), leak);
-    }
+});
+
+test('every public page ends with the footer naming the site, escaped once; the editor has no footer', async () => {
+  const dirs = await site(TWO, LEARNS, { ...CONFIG, name: 'Tom & <Jerry>' });
+  await build(dirs);
+  for (const name of PUBLIC_PAGES) {
+    const html = await readFile(join(dirs.outDir, name), 'utf8');
+    assert.ok(html.endsWith('</main>\n<footer>Tom &amp; &lt;Jerry&gt;</footer>\n</body>\n</html>\n'), name);
+    assert.equal(html.split('<footer').length, 2, name);
   }
+  assert.ok(!(await readFile(join(dirs.outDir, 'write.html'), 'utf8')).includes('<footer'));
 });
 
 test('the pill: every question in the page, the first one visible with its answer, the link to the piece, text escaped', async () => {

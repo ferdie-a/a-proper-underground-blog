@@ -1,5 +1,5 @@
 import {
-  RESERVED_SLUGS, slugify, uniqueSlug, splitTitleBody, fileFromRecord, localStamp, hasBrokenBlock, splitPills, pillProblem, parsePost,
+  RESERVED_SLUGS, slugify, uniqueSlug, splitTitleBody, fileFromRecord, recordFromFile, localStamp, hasBrokenBlock, splitPills, pillProblem, parsePost,
   SECTIONS, FOLDER, SECTION_LABEL, isPublic, sectionOf, nameOf, plainPath, publishedPath, parsePublishedPath, withSection,
 } from './lib/post.js';
 
@@ -26,6 +26,40 @@ export function doorClient(getPassword, fetchImpl = (...args) => fetch(...args))
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw { status: res.status, error: data.error || 'error ' + res.status };
     return data;
+  };
+}
+
+export function demoDoor(desk, password) {
+  let count = 0;
+  return async function door(action, params = {}) {
+    if (desk.getPassword() !== password) throw { status: 401, error: 'wrong password' };
+    if (action === 'history') throw { status: -1, error: 'demo: no history' };
+    if (action === 'list') {
+      const listing = Object.fromEntries(SECTIONS.map((section) => [FOLDER[section], []]));
+      for (const r of desk.list()) {
+        const section = sectionOf(r.path);
+        if (section !== null && r.sha !== null) listing[FOLDER[section]].push({ path: r.path, sha: r.sha });
+      }
+      return listing;
+    }
+    const local = desk.get(params.path);
+    if (action === 'read') {
+      if (!local || local.sha === null) throw { status: 404, error: 'not found' };
+      return { content: local.stored ?? fileFromRecord(local), sha: local.sha };
+    }
+    if (action === 'write') {
+      count += 1;
+      const sha = 'demo-' + Date.now().toString(36) + '-' + count;
+      const stored = params.content;
+      desk.put(params.path, local ? { ...local, sha, stored } : { ...recordFromFile(stored, sha), stored });
+      return { sha };
+    }
+    if (action === 'delete') {
+      if (local && (local.dirty || local.pending !== null)) desk.put(params.path, { ...local, sha: null });
+      else if (local) desk.remove(params.path);
+      return {};
+    }
+    throw { status: 400, error: 'invalid request' };
   };
 }
 

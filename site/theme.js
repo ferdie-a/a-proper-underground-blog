@@ -22,6 +22,21 @@
   document.addEventListener('DOMContentLoaded', writeLink);
   window.addEventListener('pageshow', function (event) { if (event.persisted) writeLink(); });
 
+  var NOTE = 'blog:demo-note';
+  document.addEventListener('DOMContentLoaded', function () {
+    var box = document.getElementById('demo-note');
+    if (!box) return;
+    var closed = false;
+    try { closed = localStorage.getItem(NOTE) === 'closed'; } catch (e) {}
+    box.hidden = closed;
+    var close = document.getElementById('demo-close');
+    if (!close) return;
+    close.addEventListener('click', function () {
+      box.hidden = true;
+      try { localStorage.setItem(NOTE, 'closed'); } catch (e) {}
+    });
+  });
+
   document.addEventListener('DOMContentLoaded', function () {
     var button = document.getElementById('theme');
     if (!button) return;

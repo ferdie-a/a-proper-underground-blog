@@ -10,7 +10,7 @@ A plain-text blog you write from your phone, with no platform, no database and n
 
 https://a-proper-underground-blog.vercel.app
 
-A few made-up pieces, so you can see the pages before installing. The editor at `/write` opens and you can type in it, but saving is switched off: every save answers `demo: saving is off`.
+A few made-up pieces, so you can see the pages before installing. The editor at `/write` asks for a password: type `prova`, and what you write stays in your browser only.
 
 ## Install in ten steps
 
@@ -160,7 +160,7 @@ node --test
 
 Runs the whole suite.
 
-`BLOG_DEMO=1` turns on the demo mode: the build marks the editor page so that it asks no password and shows `demo: saving is off`, and the server answers every request with that same refusal. To try it locally: `BLOG_DEMO=1 node dev.js --demo` (in PowerShell, `$env:BLOG_DEMO = "1"` first). To switch it off again: `Remove-Item Env:BLOG_DEMO` in PowerShell, `unset BLOG_DEMO` in bash.
+`BLOG_DEMO=1` turns on the demo mode: the build adds a short note on top of every page and marks the editor page so that it accepts the password `prova` and keeps every save in the browser (`demo: saved in this browser only`), and the server refuses every request with `demo: saving is off`. To try it locally: `BLOG_DEMO=1 node dev.js --demo` (in PowerShell, `$env:BLOG_DEMO = "1"` first). To switch it off again: `Remove-Item Env:BLOG_DEMO` in PowerShell, `unset BLOG_DEMO` in bash.
 
 ## License
 

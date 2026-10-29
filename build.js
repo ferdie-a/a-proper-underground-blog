@@ -6,7 +6,7 @@ import {
   parsePost, parsePublishedPath, renderBody, escapeHtml, hasBrokenBlock, splitPills, pillProblem, FOLDER, RESERVED_SLUGS,
   BLOCK_KEYS, unknownKey,
 } from './site/lib/post.js';
-import { renderLearnsBox, renderLearnsPage } from './lib/learns-pages.js';
+import { renderLearnsBox, renderLearnsPage, renderList } from './lib/learns-pages.js';
 
 const CONFIG_FIELDS = ['name', 'lang', 'learns.title', 'learns.intro'];
 const isObject = (value) => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -43,8 +43,16 @@ export function shortNameOf(config) {
   return Array.from(config.name.trim()).slice(0, 12).join('').trim();
 }
 
-function page(config, title, main, { script = false } = {}) {
+const REPO = 'https://github.com/ferdie-a/a-proper-underground-blog';
+const DEMO_NOTE = '<div id="demo-note" hidden><p>This is a mock blog. Clone the repo and make it yours: '
+  + `<a href="${REPO}" rel="noopener">github.com/ferdie-a/a-proper-underground-blog</a>. `
+  + 'Open <a href="/write">/write</a> and type <code>prova</code> as the password to try the editor.</p>'
+  + '<button id="demo-close" type="button">close</button></div>\n';
+
+function page(config, title, main, { script = false, learns = '', demo = false } = {}) {
   const extra = script ? '\n<script src="/learns.js" defer></script>' : '';
+  const nav = (learns ? `<a href="/learns">${escapeHtml(learns.toLowerCase())}</a>` : '')
+    + '<button id="theme" type="button" hidden></button><a id="write" href="/write" hidden>write</a>';
   return `<!doctype html>
 <html lang="${escapeHtml(config.lang)}">
 <head>
@@ -57,10 +65,11 @@ function page(config, title, main, { script = false } = {}) {
 <script src="/theme.js"></script>${extra}
 </head>
 <body>
-<header><h1><a href="/">${escapeHtml(config.name)}</a></h1><button id="theme" type="button" hidden></button><a id="write" href="/write" hidden>write</a></header>
+${demo ? DEMO_NOTE : ''}<header><h1><a href="/">${escapeHtml(config.name)}</a></h1> <nav>${nav}</nav></header>
 <main>
 ${main}
 </main>
+<footer>${escapeHtml(config.name)}</footer>
 </body>
 </html>
 `;
@@ -83,7 +92,7 @@ function editorPage(config, demo) {
 <script type="module" src="/write.js"></script>
 </head>
 <body class="write">
-<textarea id="text" hidden></textarea>
+${demo ? DEMO_NOTE : ''}<textarea id="text" hidden></textarea>
 <div id="list" hidden></div>
 <div class="bar">
   <span id="cmds"></span>
@@ -176,7 +185,7 @@ async function readLearns(dir) {
 }
 
 function renderPiece(piece) {
-  return `<article>\n<h2>${escapeHtml(piece.title)}</h2>\n<p class="date">${escapeHtml(piece.date)}</p>\n<pre>${renderBody(piece.body)}</pre>\n</article>`;
+  return `<article>\n<h2>${escapeHtml(piece.title)}</h2> <address>${escapeHtml(piece.date)}</address>\n<pre>${renderBody(piece.body)}</pre>\n</article>`;
 }
 
 export async function build({
@@ -194,23 +203,23 @@ export async function build({
   await stampServiceWorker(siteDir, outDir, generated);
 
   const name = config.name;
+  const frame = { learns: learns.length > 0 ? config.learns.title : '', demo };
   for (const p of posts) {
-    await writeFile(join(outDir, p.slug + '.html'), page(config, `${p.title} - ${name}`, renderPiece(p)));
+    await writeFile(join(outDir, p.slug + '.html'), page(config, `${p.title} - ${name}`, renderPiece(p), frame));
   }
   if (learns.length > 0) {
     await mkdir(join(outDir, 'learns'), { recursive: true });
     for (const l of learns) {
-      await writeFile(join(outDir, 'learns', l.slug + '.html'), page(config, `${l.title} - ${name}`, renderPiece(l)));
+      await writeFile(join(outDir, 'learns', l.slug + '.html'), page(config, `${l.title} - ${name}`, renderPiece(l), frame));
     }
     const learnsPage = renderLearnsPage(learns, config.learns);
-    await writeFile(join(outDir, 'learns.html'), page(config, `${config.learns.title} - ${name}`, learnsPage, { script: true }));
+    await writeFile(join(outDir, 'learns.html'), page(config, `${config.learns.title} - ${name}`, learnsPage, { ...frame, script: true }));
   }
 
-  const rows = posts.map((p) => `<li><span class="date">${p.date}</span> <a href="/${p.slug}">${escapeHtml(p.title)}</a></li>`);
   const learnsBox = renderLearnsBox(learns, config.learns);
-  const home = `${learnsBox}<ul class="list">\n${rows.join('\n')}\n</ul>`;
-  await writeFile(join(outDir, 'index.html'), page(config, name, home, { script: learnsBox !== '' }));
-  await writeFile(join(outDir, '404.html'), page(config, `404 - ${name}`, '<pre>404</pre>'));
+  const home = `${learnsBox}${renderList(posts.map((p) => ({ ...p, href: '/' + escapeHtml(p.slug) })))}`;
+  await writeFile(join(outDir, 'index.html'), page(config, name, home, { ...frame, script: learnsBox !== '' }));
+  await writeFile(join(outDir, '404.html'), page(config, `404 - ${name}`, '<pre>404</pre>', frame));
   return posts.length;
 }
 
